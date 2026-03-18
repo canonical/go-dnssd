@@ -2,6 +2,8 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/brutella/dnssd"
 	"github.com/brutella/dnssd/log"
 
@@ -16,7 +18,26 @@ import (
 	"time"
 )
 
-type mapArgs map[string]string
+type recordSet struct {
+	records map[string]string
+}
+
+func newRecordSet() recordSet {
+	return recordSet{records: make(map[string]string)}
+}
+
+func (s recordSet) String() string {
+	return fmt.Sprint(s.records)
+}
+
+func (r recordSet) Set(txt string) error {
+	key, value, ok := strings.Cut(txt, "=")
+	if !ok {
+		return errors.New(`value must be of the form "key=value"`)
+	}
+	r.records[key] = value
+	return nil
+}
 
 var nameFlag = flag.String("Name", "", "Service Name")
 var typeFlag = flag.String("Type", "", "Service type")
@@ -27,28 +48,12 @@ var portFlag = flag.Int("Port", 0, "")
 var interfaceFlag = flag.String("Interface", "", "")
 var timeFormat = "15:04:05.000"
 var verboseFlag = flag.Bool("Verbose", false, "Verbose logging")
-var txtRecords = mapArgs{}
+var txtRecords = newRecordSet()
 
 // Name of the invoked executable.
 var name = filepath.Base(os.Args[0])
 
 // Handle multiple args for TXT records
-func (s *mapArgs) String() string {
-	return fmt.Sprint(*s)
-}
-
-func (s *mapArgs) Set(value string) error {
-	key, value, ok := strings.Cut(value, "=")
-	if ok {
-		// key and value are set
-		(*s)[key] = value
-		return nil
-	}
-
-	// no "=" in s
-	return fmt.Errorf("value must of the form 'key=value'")
-}
-
 func registerTxtFlag() {
 	flag.Var(&txtRecords, "Txt", "can be used multiple times")
 }
@@ -133,7 +138,7 @@ func register(instance string) {
 			Ifaces: parseInterfaceFlag(),
 			IPs:    ips,
 			Host:   *hostFlag,
-			Text:   txtRecords,
+			Text:   txtRecords.records,
 		}
 		srv, err := dnssd.NewService(cfg)
 		if err != nil {
